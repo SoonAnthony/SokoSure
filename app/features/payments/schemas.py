@@ -6,6 +6,12 @@ from typing import Optional
 from app.features.payments.models import PaymentStatus
 
 
+class PaymentInitiate(BaseModel):
+    policy_id: UUID
+    amount: float
+    provider_transaction_id: str
+
+
 class PaymentWebhookPayload(BaseModel):
     policy_id: UUID
     amount: float
