@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from uuid import UUID
 
 from app.core.database import get_session
-from app.features.users.schemas import UserCreate, UserRead, UserLogin
+from app.features.users.schemas import UserCreate, UserRead, UserLogin, UserCompleteProfile
 from app.features.users import services as user_services
 
 router = APIRouter()
@@ -41,6 +41,19 @@ async def get_user_profile(
     db: AsyncSession = Depends(get_session),
 ):
     user = await user_services.get_user_by_id(db, user_id)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    return user
+
+
+@router.patch("/{user_id}/profile", response_model=UserRead)
+async def complete_profile(
+    user_id: UUID,
+    data: UserCompleteProfile,
+    db: AsyncSession = Depends(get_session),
+):
+    """Complete the user profile after USSD registration."""
+    user = await user_services.complete_profile(db, user_id, data)
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
     return user
