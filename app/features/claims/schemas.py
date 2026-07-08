@@ -1,6 +1,7 @@
 from pydantic import BaseModel, Field
 from uuid import UUID
 from datetime import datetime
+from typing import List
 
 from app.features.claims.models import ClaimCategory, ClaimStatus
 
@@ -21,3 +22,11 @@ class ClaimRead(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class ClaimStatusUpdate(BaseModel):
+    status: ClaimStatus
+
+
+class ClaimListResponse(BaseModel):
+    claims: List[ClaimRead]
