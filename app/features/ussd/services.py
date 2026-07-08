@@ -6,14 +6,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.features.ussd.constants import (
     USSDState,
-    COUNTIES,
-    BUSINESS_OPTIONS,
-    INCOME_OPTIONS,
-    FREQUENCY_OPTIONS,
     CLAIM_CATEGORY_OPTIONS,
 )
 from app.features.ussd.models import USSDSession
-from app.features.users.schemas import UserCreate
+from app.features.users.schemas import UserCreateUSSD
 from app.features.users import services as user_services
 from app.features.policies import services as policy_services
 from app.features.payments import services as payment_services
@@ -106,24 +102,12 @@ class USSDService:
         # Registration flow
         if state == USSDState.REGISTER_ID:
             return await self.handle_register_id(db, session, user_input)
-        if state == USSDState.REGISTER_NAME:
-            return await self.handle_register_name(db, session, user_input)
         if state == USSDState.REGISTER_PIN:
             return await self.handle_register_pin(db, session, user_input)
         if state == USSDState.REGISTER_CONFIRM:
             return await self.handle_register_confirm(db, session, user_input)
-        if state == USSDState.REGISTER_COUNTY:
-            return await self.handle_register_county(db, session, user_input)
-        if state == USSDState.REGISTER_BUSINESS:
-            return await self.handle_register_business(db, session, user_input)
-        if state == USSDState.REGISTER_INCOME:
-            return await self.handle_register_income(db, session, user_input)
-        if state == USSDState.REGISTER_FREQUENCY:
-            return await self.handle_register_frequency(db, session, user_input)
 
-        # Login flow
-        if state == USSDState.LOGIN_ID:
-            return await self.handle_login_id(db, session, user_input)
+        # Login flow — only PIN needed, phone comes from Africa's Talking
         if state == USSDState.LOGIN_PIN:
             return await self.handle_login_pin(db, session, user_input)
 
@@ -177,9 +161,10 @@ class USSDService:
             return _con("Enter your National ID")
 
         if user_input == "2":
-            session.state = USSDState.LOGIN_ID
+            # Phone number is known from AT — go straight to PIN
+            session.state = USSDState.LOGIN_PIN
             await _save(db, session)
-            return _con("Enter your National ID")
+            return _con("Enter your PIN")
 
         return _invalid()
 
@@ -193,14 +178,6 @@ class USSDService:
             return _invalid()
 
         session.national_id = user_input
-        session.state = USSDState.REGISTER_NAME
-        await _save(db, session)
-        return _con("Enter your Full Name")
-
-    async def handle_register_name(
-        self, db: AsyncSession, session: USSDSession, user_input: str
-    ) -> PlainTextResponse:
-        session.full_name = user_input
         session.state = USSDState.REGISTER_PIN
         await _save(db, session)
         return _con("Create a 4-digit PIN")
@@ -220,150 +197,46 @@ class USSDService:
     async def handle_register_confirm(
         self, db: AsyncSession, session: USSDSession, user_input: str
     ) -> PlainTextResponse:
-        """PIN confirmation must match the previously entered PIN."""
+        """PIN confirmation must match. On success, create the user and end session."""
         if user_input != session.pin:
             return _con("PINs do not match.\nCreate a 4-digit PIN")
 
-        session.state = USSDState.REGISTER_COUNTY
-        await _save(db, session)
-        return _con("Enter your County (e.g. NAIROBI)")
-
-    async def handle_register_county(
-        self, db: AsyncSession, session: USSDSession, user_input: str
-    ) -> PlainTextResponse:
-        """County must exist in the supported list."""
-        county = user_input.upper().replace(" ", "_")
-        if county not in COUNTIES:
-            return _invalid()
-
-        session.county = county
-        session.state = USSDState.REGISTER_BUSINESS
-        await _save(db, session)
-        return _con(
-            "Select Business Type\n"
-            "1. Mama Mboga\n"
-            "2. Mitumba\n"
-            "3. Kibanda Food\n"
-            "4. Salon/Barbershop\n"
-            "5. Jua Kali\n"
-            "6. Electronics/Phones\n"
-            "7. Shoes & Bags\n"
-            "8. Duka\n"
-            "9. Tailoring\n"
-            "0. Other"
-        )
-
-    async def handle_register_business(
-        self, db: AsyncSession, session: USSDSession, user_input: str
-    ) -> PlainTextResponse:
-        """Business type option must be in the defined map."""
-        if user_input not in BUSINESS_OPTIONS:
-            return _invalid()
-
-        session.business = BUSINESS_OPTIONS[user_input]
-        session.state = USSDState.REGISTER_INCOME
-        await _save(db, session)
-        return _con(
-            "Average Daily Income\n"
-            "1. Below 500\n"
-            "2. 500 - 1,000\n"
-            "3. 1,000 - 3,000\n"
-            "4. 3,000 - 10,000\n"
-            "5. Above 10,000"
-        )
-
-    async def handle_register_income(
-        self, db: AsyncSession, session: USSDSession, user_input: str
-    ) -> PlainTextResponse:
-        """Income option must be in the defined map."""
-        if user_input not in INCOME_OPTIONS:
-            return _invalid()
-
-        session.income = INCOME_OPTIONS[user_input]
-        session.state = USSDState.REGISTER_FREQUENCY
-        await _save(db, session)
-        return _con(
-            "Payment Frequency\n"
-            "1. Daily\n"
-            "2. Weekly\n"
-            "3. Monthly"
-        )
-
-    async def handle_register_frequency(
-        self, db: AsyncSession, session: USSDSession, user_input: str
-    ) -> PlainTextResponse:
-        """
-        Final registration step.
-        Validates frequency, delegates user creation to User Service,
-        then triggers Recommendation Service and sends a welcome SMS.
-        USSD never implements the business logic itself.
-        """
-        if user_input not in FREQUENCY_OPTIONS:
-            return _invalid()
-
-        session.frequency = FREQUENCY_OPTIONS[user_input]
-        await _save(db, session)
-
-        # Delegate user creation to User Service
+        # Delegate user creation to User Service — only national_id, phone, PIN needed
         try:
-            user = await user_services.create_user(
+            user = await user_services.create_user_from_ussd(
                 db,
-                UserCreate(
+                UserCreateUSSD(
                     national_id=session.national_id,
                     phone_no=session.phone_number,
-                    full_name=session.full_name,
                     pin=session.pin,
-                    county=session.county,
-                    business_type=session.business,
-                    income_bracket=session.income,
-                    payment_frequency=session.frequency,
                 ),
             )
         except ValueError as e:
             return _end(str(e))
 
-        # Delegate recommendation generation to Recommendation Service
-        await policy_services.generate_recommendation(db, user)
-
-        # Send welcome SMS via Notification Service (not directly via AT)
+        # Send welcome SMS — it will include a link/prompt to complete the profile
         await notification_service.send_welcome_sms(db, user)
 
         return _end(
-            "Registration complete.\n"
-            "You will receive an SMS shortly."
+            "Account created!\n"
+            "Check your SMS to complete your profile."
         )
 
-    # ─── Login Handlers ───────────────────────────────────────────────────────
-
-    async def handle_login_id(
-        self, db: AsyncSession, session: USSDSession, user_input: str
-    ) -> PlainTextResponse:
-        """Collect National ID during login."""
-        if not user_input.isdigit():
-            return _invalid()
-
-        session.national_id = user_input
-        session.state = USSDState.LOGIN_PIN
-        await _save(db, session)
-        return _con("Enter your PIN")
+    # ─── Login Handler ────────────────────────────────────────────────────────
 
     async def handle_login_pin(
         self, db: AsyncSession, session: USSDSession, user_input: str
     ) -> PlainTextResponse:
         """
-        Delegate PIN verification to User Service.
-        On success, store user_id in session and show dashboard.
+        Phone number is already known from Africa's Talking.
+        Only the PIN is needed to authenticate.
         """
         if not user_input.isdigit() or len(user_input) != 4:
             return _invalid()
 
-        # User Service authenticates using phone number (derived from session)
-        # and the PIN the user just entered.
-        user = await user_services.authenticate_user(
-            db, session.phone_number, user_input
-        )
+        user = await user_services.authenticate_user(db, session.phone_number, user_input)
         if not user:
-            return _end("Invalid National ID or PIN.\nPlease dial again.")
+            return _end("Incorrect PIN.\nPlease dial again.")
 
         session.user_id = str(user.id)
         session.state = USSDState.DASHBOARD
