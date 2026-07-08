@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from uuid import UUID
 from datetime import datetime
 
@@ -17,7 +17,12 @@ class UserBase(BaseModel):
 
 class UserCreate(UserBase):
     pin: str  # plain 4-digit PIN from USSD input, hashed in services.py
-
+    @field_validator("pin")
+    @classmethod
+    def validate_pin(cls, v):
+        if not v.isdigit() or len(v) != 4:
+            raise ValueError("PIN must be exactly 4 digits")
+        return v
 
 class UserRead(UserBase):
     id: UUID
