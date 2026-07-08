@@ -108,6 +108,23 @@ def upgrade() -> None:
     op.create_index(op.f('ix_premiumpayment_policy_id'), 'premiumpayment', ['policy_id'], unique=False)
     op.create_index(op.f('ix_premiumpayment_provider_transaction_id'), 'premiumpayment', ['provider_transaction_id'], unique=True)
     op.create_index(op.f('ix_premiumpayment_status'), 'premiumpayment', ['status'], unique=False)
+    op.create_table('ussdsession',
+    sa.Column('session_id', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
+    sa.Column('phone_number', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
+    sa.Column('state', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
+    sa.Column('national_id', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
+    sa.Column('full_name', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
+    sa.Column('pin', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
+    sa.Column('county', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
+    sa.Column('business', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
+    sa.Column('income', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
+    sa.Column('frequency', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
+    sa.Column('claim_type', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
+    sa.Column('user_id', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
+    sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
+    sa.PrimaryKeyConstraint('session_id')
+    )
+    op.create_index(op.f('ix_ussdsession_phone_number'), 'ussdsession', ['phone_number'], unique=False)
     # ### end Alembic commands ###
 
 
@@ -135,4 +152,6 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_user_national_id'), table_name='user')
     op.drop_index(op.f('ix_user_county'), table_name='user')
     op.drop_table('user')
+    op.drop_index(op.f('ix_ussdsession_phone_number'), table_name='ussdsession')
+    op.drop_table('ussdsession')
     # ### end Alembic commands ###
