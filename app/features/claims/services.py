@@ -1,15 +1,22 @@
 from random import randint
+from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.features.claims.models import Claim, ClaimStatus
 from app.features.claims.schemas import ClaimCreate
-from app.features.notifications.models import SMSDirection, SMSLog
 from app.features.policies.models import Policy, PolicyStatus
+from app.features.notifications.services import NotificationService
+
+notification_service = NotificationService()
 
 
 def _generate_claim_code() -> str:
     return f"CL{randint(100000, 999999)}"
+
+
+def _to_uuid(value) -> UUID:
+    return value if isinstance(value, UUID) else UUID(str(value))
 
 
 async def get_claim_by_id(db: AsyncSession, claim_id):
@@ -31,10 +38,6 @@ async def get_claims_by_user_id(db: AsyncSession, user_id):
     )
     result = await db.execute(stmt)
     return result.scalars().all()
-
-
-async def _log_sms(db: AsyncSession, user_id, message: str) -> None:
-    db.add(SMSLog(user_id=user_id, message=message, direction=SMSDirection.OUTBOUND))
 
 
 async def submit_claim(db: AsyncSession, payload: ClaimCreate) -> Claim:
@@ -64,14 +67,43 @@ async def submit_claim(db: AsyncSession, payload: ClaimCreate) -> Claim:
         status=ClaimStatus.SUBMITTED,
     )
     db.add(claim)
-    await _log_sms(
-        db,
-        policy.user_id,
-        f"Claim {claim.claim_code} received for policy {policy.policy_code}.",
-    )
     await db.commit()
     await db.refresh(claim)
+
+    # Send real SMS via Notification Service, instead of writing SMSLog directly
+    await notification_service.send_claim_confirmation_sms(db, policy.user_id, claim)
+
     return claim
+
+
+async def submit_claim_for_user(
+    db: AsyncSession,
+    user_id,
+    category: str,
+    description: str,
+) -> Claim:
+    """
+    Called directly by USSD. Looks up the user's active policy,
+    then delegates to submit_claim().
+    """
+    user_uuid = _to_uuid(user_id)
+
+    result = await db.execute(
+        select(Policy).where(
+            Policy.user_id == user_uuid,
+            Policy.status == PolicyStatus.ACTIVE,
+        )
+    )
+    policy = result.scalar_one_or_none()
+    if not policy:
+        raise ValueError("No active policy found for this user")
+
+    payload = ClaimCreate(
+        policy_id=policy.id,
+        category=category,
+        description=description,
+    )
+    return await submit_claim(db, payload)
 
 
 async def update_claim_status(db: AsyncSession, claim_id, status: ClaimStatus) -> Claim | None:
