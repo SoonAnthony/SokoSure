@@ -4,31 +4,24 @@ from enum import Enum
 
 
 class USSDState(str, Enum):
-    # Entry point
     MAIN_MENU = "MAIN_MENU"
 
-    # Registration steps
-    REGISTER_ID       = "REGISTER_ID"
-    REGISTER_NAME     = "REGISTER_NAME"
-    REGISTER_PIN      = "REGISTER_PIN"
-    REGISTER_CONFIRM  = "REGISTER_CONFIRM"
-    REGISTER_COUNTY   = "REGISTER_COUNTY"
-    REGISTER_BUSINESS = "REGISTER_BUSINESS"
-    REGISTER_INCOME   = "REGISTER_INCOME"
-    REGISTER_FREQUENCY= "REGISTER_FREQUENCY"
+    # Registration — 3 steps only (phone comes from AT)
+    REGISTER_ID      = "REGISTER_ID"
+    REGISTER_PIN     = "REGISTER_PIN"
+    REGISTER_CONFIRM = "REGISTER_CONFIRM"
 
-    # Login steps
-    LOGIN_ID  = "LOGIN_ID"
+    # Login — 1 step only (phone comes from AT)
     LOGIN_PIN = "LOGIN_PIN"
 
     # Post-login dashboard and sub-flows
-    DASHBOARD        = "DASHBOARD"
-    VIEW_POLICY      = "VIEW_POLICY"
-    ACTIVATE_POLICY  = "ACTIVATE_POLICY"
-    PAY_PREMIUM      = "PAY_PREMIUM"
-    FILE_CLAIM_TYPE  = "FILE_CLAIM_TYPE"
-    FILE_CLAIM_DESC  = "FILE_CLAIM_DESC"
-    HELP             = "HELP"
+    DASHBOARD       = "DASHBOARD"
+    VIEW_POLICY     = "VIEW_POLICY"
+    ACTIVATE_POLICY = "ACTIVATE_POLICY"
+    PAY_PREMIUM     = "PAY_PREMIUM"
+    FILE_CLAIM_TYPE = "FILE_CLAIM_TYPE"
+    FILE_CLAIM_DESC = "FILE_CLAIM_DESC"
+    HELP            = "HELP"
 
 
 # All 47 Kenyan counties (uppercase, used for validation)
