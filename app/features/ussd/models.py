@@ -11,18 +11,13 @@ class USSDSession(SQLModel, table=True):
     Persists a user's position in the USSD state machine across requests.
     Africa's Talking sends the same sessionId for every step of a session.
     """
-    session_id:   str = Field(primary_key=True)   # Africa's Talking sessionId
-    phone_number: str = Field(index=True)          # caller's MSISDN
-    state:        str = Field(default="MAIN_MENU") # current USSDState value
+    session_id:   str = Field(primary_key=True)
+    phone_number: str = Field(index=True)
+    state:        str = Field(default="MAIN_MENU")
 
-    # Temporary registration data collected step-by-step
+    # Temporary registration data (only 2 fields needed now)
     national_id:  Optional[str] = None
-    full_name:    Optional[str] = None
-    pin:          Optional[str] = None             # plain PIN, cleared after hashing
-    county:       Optional[str] = None
-    business:     Optional[str] = None
-    income:       Optional[str] = None
-    frequency:    Optional[str] = None
+    pin:          Optional[str] = None  # plain PIN, used only during confirm step
 
     # Temporary claim data
     claim_type:   Optional[str] = None

@@ -80,19 +80,20 @@ class County(str, Enum):
     NAIROBI = "NAIROBI"
 
 class User(SQLModel, table=True):
-    id:UUID = Field(default_factory=uuid4, primary_key=True)
-    national_id:str = Field(unique=True, index=True)
-    phone_no:str = Field(unique=True, index=True)
-    full_name:str 
-    hashed_pin:str
-    failed_pin_attempts:int = Field(default=0)
-    county:County = Field(index=True)
-    business_type: BusinessType
-    income_bracket: IncomeBracket
-    payment_frequency: PaymentFrequency
-    created_at:Optional[datetime] = Field(
-        sa_column=Column(DateTime(timezone=True),
-        server_default=func.now()
-        )
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
+    national_id: str = Field(unique=True, index=True)
+    phone_no: str = Field(unique=True, index=True)
+    hashed_pin: str
+    failed_pin_attempts: int = Field(default=0)
+
+    # Profile fields — collected after USSD registration via SMS/web
+    full_name: Optional[str] = None
+    county: Optional[County] = Field(default=None, index=True)
+    business_type: Optional[BusinessType] = None
+    income_bracket: Optional[IncomeBracket] = None
+    payment_frequency: Optional[PaymentFrequency] = None
+
+    created_at: Optional[datetime] = Field(
+        sa_column=Column(DateTime(timezone=True), server_default=func.now())
     )
 
