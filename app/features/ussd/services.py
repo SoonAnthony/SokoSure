@@ -214,8 +214,11 @@ class USSDService:
         except ValueError as e:
             return _end(str(e))
 
-        # Send welcome SMS — it will include a link/prompt to complete the profile
-        await notification_service.send_welcome_sms(db, user)
+        # Send welcome SMS — failure must not break the USSD session
+        try:
+            await notification_service.send_welcome_sms(db, user)
+        except Exception:
+            pass  # SMS is auxiliary — user is already created
 
         return _end(
             "Account created!\n"
