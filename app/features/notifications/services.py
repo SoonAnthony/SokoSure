@@ -195,8 +195,9 @@ class NotificationService:
             # All data collected — update the user's profile
             from app.features.users.schemas import UserCompleteProfile
             from app.features.users import services as user_services
+            from app.features.policies import services as policy_services
 
-            await user_services.complete_profile(
+            updated_user = await user_services.complete_profile(
                 db,
                 user.id,
                 UserCompleteProfile(
@@ -208,17 +209,28 @@ class NotificationService:
                 ),
             )
 
+            # Generate recommendation and create a pending policy
+            try:
+                policy = await policy_services.generate_recommendation(db, updated_user)
+                await self.send_sms(
+                    db, updated_user,
+                    f"Profile complete! Here is your recommendation:\n"
+                    f"Plan: {policy.policy_code}\n"
+                    f"Coverage: KES {policy.coverage_amount:,.0f}\n"
+                    f"Premium: KES {policy.premium_amount:,.0f} ({policy.premium_frequency})\n"
+                    f"Dial *384# and select Activate Policy to get started.",
+                )
+            except Exception:
+                await self.send_sms(
+                    db, updated_user,
+                    "Profile complete!\n"
+                    "Dial *384# to view your policy recommendation.",
+                )
+
             # Mark session complete
             session.state = SMSSessionState.COMPLETE
             db.add(session)
             await db.commit()
-
-            await self.send_sms(
-                db, user,
-                "Profile complete!\n"
-                "We are preparing your insurance recommendation.\n"
-                "You will receive it shortly.",
-            )
 
     async def _handle_keyword(
         self, db: AsyncSession, user: User | None, phone_number: str, text: str
