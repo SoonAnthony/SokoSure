@@ -66,7 +66,7 @@ async def _call_gemini(user: User) -> dict:
     try:
         prompt = _build_prompt(user)
         response = _model().models.generate_content(
-            model="gemini-2.0-flash",
+            model="gemini-2.5-flash",
             contents=prompt,
         )
 
