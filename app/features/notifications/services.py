@@ -44,7 +44,7 @@ class NotificationService:
         try:
             response = _sms().send(message, [user.phone_no], sender_id=settings.AT_SHORTCODE)
         except Exception:
-            logger.exception("Failed to send SMS to user %s", user.id)
+            logger.exception("Failed to send SMS to user")
             response = None
 
         await self._log(db, user.id, message, SMSDirection.OUTBOUND)
@@ -58,7 +58,7 @@ class NotificationService:
         try:
             return _sms().send(message, [phone_number], sender_id=settings.AT_SHORTCODE)
         except Exception:
-            logger.exception("Failed to send SMS to phone %s", phone_number)
+            logger.exception("Failed to send SMS to phone number")
             return None
 
     async def _log(
