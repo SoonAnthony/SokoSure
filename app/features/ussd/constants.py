@@ -23,6 +23,14 @@ class USSDState(str, Enum):
     FILE_CLAIM_DESC = "FILE_CLAIM_DESC"
     HELP            = "HELP"
 
+    # Complete Profile flow (NEW)
+    SELECT_REGION    = "SELECT_REGION"
+    SELECT_COUNTY    = "SELECT_COUNTY"
+    SELECT_BUSINESS  = "SELECT_BUSINESS"
+    SELECT_INCOME    = "SELECT_INCOME"
+    SELECT_FREQUENCY = "SELECT_FREQUENCY"
+    ENTER_FULL_NAME  = "ENTER_FULL_NAME"
+
 
 # All 47 Kenyan counties (uppercase, used for validation)
 COUNTIES: list[str] = [
@@ -35,6 +43,49 @@ COUNTIES: list[str] = [
     "BOMET", "KAKAMEGA", "VIHIGA", "BUNGOMA", "BUSIA", "SIAYA",
     "KISUMU", "HOMA_BAY", "MIGORI", "KISII", "NYAMIRA", "NAIROBI",
 ]
+
+# Menu option → Region display name (UI grouping only, not a DB enum)
+REGIONS: dict[str, str] = {
+    "1": "Nairobi/Central",
+    "2": "Coast",
+    "3": "North Eastern",
+    "4": "Eastern",
+    "5": "Rift Valley",
+    "6": "Western",
+    "7": "Nyanza",
+}
+
+# Region display name → ordered list of County enum values in that region
+REGION_COUNTIES: dict[str, list[str]] = {
+    "Nairobi/Central": [
+        "NAIROBI", "NYANDARUA", "NYERI", "KIRINYAGA", "MURANGA", "KIAMBU",
+    ],
+    "Coast": [
+        "MOMBASA", "KWALE", "KILIFI", "TANA_RIVER", "LAMU", "TAITA_TAVETA",
+    ],
+    "North Eastern": [
+        "GARISSA", "WAJIR", "MANDERA",
+    ],
+    "Eastern": [
+        "MARSABIT", "ISIOLO", "MERU", "THARAKA_NITHI", "EMBU", "KITUI",
+        "MACHAKOS", "MAKUENI",
+    ],
+    "Rift Valley": [
+        "TURKANA", "WEST_POKOT", "SAMBURU", "TRANS_NZOIA", "UASIN_GISHU",
+        "ELGEYO_MARAKWET", "NANDI", "BARINGO", "LAIKIPIA", "NAKURU",
+        "NAROK", "KAJIADO", "KERICHO", "BOMET",
+    ],
+    "Western": [
+        "KAKAMEGA", "VIHIGA", "BUNGOMA", "BUSIA",
+    ],
+    "Nyanza": [
+        "SIAYA", "KISUMU", "HOMA_BAY", "MIGORI", "KISII", "NYAMIRA",
+    ],
+}
+
+# Max counties shown per USSD screen before "0. More options" pagination kicks in.
+# Only Rift Valley (14 counties) actually needs more than one page.
+COUNTIES_PER_PAGE = 7
 
 # Menu option → BusinessType enum value
 BUSINESS_OPTIONS: dict[str, str] = {

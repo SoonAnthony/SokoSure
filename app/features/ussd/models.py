@@ -1,5 +1,3 @@
-# app/features/ussd/models.py
-
 from sqlmodel import SQLModel, Field
 from typing import Optional
 from datetime import datetime
@@ -18,6 +16,15 @@ class USSDSession(SQLModel, table=True):
     # Temporary registration data (only 2 fields needed now)
     national_id:  Optional[str] = None
     pin:          Optional[str] = None  # plain PIN, used only during confirm step
+
+    # Temporary profile-completion data
+    selected_region: Optional[str] = None
+    county_page: Optional[int] = Field(default=0)
+    selected_county: Optional[str] = None
+    selected_business_type: Optional[str] = None
+    selected_income_bracket: Optional[str] = None
+    selected_payment_frequency: Optional[str] = None
+    selected_full_name: Optional[str] = None
 
     # Temporary claim data
     claim_type:   Optional[str] = None

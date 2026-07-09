@@ -4,10 +4,19 @@ from fastapi.responses import PlainTextResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from uuid import UUID
+
 from app.features.ussd.constants import (
     USSDState,
     CLAIM_CATEGORY_OPTIONS,
+    REGIONS,
+    REGION_COUNTIES,
+    COUNTIES_PER_PAGE,
+    BUSINESS_OPTIONS,
+    INCOME_OPTIONS,
+    FREQUENCY_OPTIONS,
 )
+from app.features.users.schemas import UserCompleteProfile
 from app.features.ussd.models import USSDSession
 from app.features.users.schemas import UserCreateUSSD
 from app.features.users import services as user_services
@@ -127,6 +136,20 @@ class USSDService:
         if state == USSDState.HELP:
             return await self.handle_help(db, session, user_input)
 
+        # Profile completion flow
+        if state == USSDState.SELECT_REGION:
+            return await self.handle_select_region(db, session, user_input)
+        if state == USSDState.SELECT_COUNTY:
+            return await self.handle_select_county(db, session, user_input)
+        if state == USSDState.SELECT_BUSINESS:
+            return await self.handle_select_business(db, session, user_input)
+        if state == USSDState.SELECT_INCOME:
+            return await self.handle_select_income(db, session, user_input)
+        if state == USSDState.SELECT_FREQUENCY:
+            return await self.handle_select_frequency(db, session, user_input)
+        if state == USSDState.ENTER_FULL_NAME:
+            return await self.handle_enter_full_name(db, session, user_input)
+
         # Fallback — should never reach here in normal flow
         return _end("Session error. Please dial again.")
 
@@ -147,7 +170,8 @@ class USSDService:
             "3. Pay Premium\n"
             "4. File Claim\n"
             "5. Help\n"
-            "6. Logout"
+            "6. Logout\n"
+            "7. Complete Profile"
         )
 
     # ─── Main Menu Handler ────────────────────────────────────────────────────
@@ -290,6 +314,12 @@ class USSDService:
             await _save(db, session)
             return _end("You have been logged out.")
 
+        if user_input == "7":
+            session.state = USSDState.SELECT_REGION
+            session.county_page = 0
+            await _save(db, session)
+            return self.show_region_menu()
+
         return _invalid()
 
     # ─── Policy Handlers ──────────────────────────────────────────────────────
@@ -392,4 +422,141 @@ class USSDService:
             "SokoSure Support\n"
             "Call: 0800 720 000\n"
             "SMS: 40001"
+        )
+
+    # ─── Profile Completion Handlers ─────────────────────────────────────────
+
+    def show_region_menu(self) -> PlainTextResponse:
+        lines = "\n".join(f"{k}. {v}" for k, v in REGIONS.items())
+        return _con(f"Select Region\n{lines}")
+
+    async def handle_select_region(
+        self, db: AsyncSession, session: USSDSession, user_input: str
+    ) -> PlainTextResponse:
+        if user_input not in REGIONS:
+            return _invalid()
+
+        session.selected_region = REGIONS[user_input]
+        session.county_page = 0
+        session.state = USSDState.SELECT_COUNTY
+        await _save(db, session)
+        return self.show_county_menu(session)
+
+    def show_county_menu(self, session: USSDSession) -> PlainTextResponse:
+        counties = REGION_COUNTIES[session.selected_region]
+        page = session.county_page or 0
+        start = page * COUNTIES_PER_PAGE
+        end = start + COUNTIES_PER_PAGE
+        page_counties = counties[start:end]
+
+        lines = "\n".join(f"{i + 1}. {c}" for i, c in enumerate(page_counties))
+        if end < len(counties):
+            lines += "\n0. More options"
+
+        return _con(f"Select County\n{lines}")
+
+    async def handle_select_county(
+        self, db: AsyncSession, session: USSDSession, user_input: str
+    ) -> PlainTextResponse:
+        counties = REGION_COUNTIES[session.selected_region]
+        page = session.county_page or 0
+        start = page * COUNTIES_PER_PAGE
+        end = start + COUNTIES_PER_PAGE
+        page_counties = counties[start:end]
+
+        if user_input == "0" and end < len(counties):
+            session.county_page = page + 1
+            await _save(db, session)
+            return self.show_county_menu(session)
+
+        if not user_input.isdigit():
+            return _invalid()
+
+        idx = int(user_input) - 1
+        if idx < 0 or idx >= len(page_counties):
+            return _invalid()
+
+        session.selected_county = page_counties[idx]
+        session.state = USSDState.SELECT_BUSINESS
+        await _save(db, session)
+        return self.show_business_menu()
+
+    def show_business_menu(self) -> PlainTextResponse:
+        lines = "\n".join(f"{k}. {v}" for k, v in BUSINESS_OPTIONS.items())
+        return _con(f"Select Business Type\n{lines}")
+
+    async def handle_select_business(
+        self, db: AsyncSession, session: USSDSession, user_input: str
+    ) -> PlainTextResponse:
+        if user_input not in BUSINESS_OPTIONS:
+            return _invalid()
+
+        session.selected_business_type = BUSINESS_OPTIONS[user_input]
+        session.state = USSDState.SELECT_INCOME
+        await _save(db, session)
+        return self.show_income_menu()
+
+    def show_income_menu(self) -> PlainTextResponse:
+        lines = "\n".join(f"{k}. {v}" for k, v in INCOME_OPTIONS.items())
+        return _con(f"Select Income Range\n{lines}")
+
+    async def handle_select_income(
+        self, db: AsyncSession, session: USSDSession, user_input: str
+    ) -> PlainTextResponse:
+        if user_input not in INCOME_OPTIONS:
+            return _invalid()
+
+        session.selected_income_bracket = INCOME_OPTIONS[user_input]
+        session.state = USSDState.SELECT_FREQUENCY
+        await _save(db, session)
+        return self.show_frequency_menu()
+
+    def show_frequency_menu(self) -> PlainTextResponse:
+        lines = "\n".join(f"{k}. {v}" for k, v in FREQUENCY_OPTIONS.items())
+        return _con(f"Select Payment Frequency\n{lines}")
+
+    async def handle_select_frequency(
+        self, db: AsyncSession, session: USSDSession, user_input: str
+    ) -> PlainTextResponse:
+        if user_input not in FREQUENCY_OPTIONS:
+            return _invalid()
+
+        session.selected_payment_frequency = FREQUENCY_OPTIONS[user_input]
+        session.state = USSDState.ENTER_FULL_NAME
+        await _save(db, session)
+        return _con("Enter your full name")
+
+    async def handle_enter_full_name(
+        self, db: AsyncSession, session: USSDSession, user_input: str
+    ) -> PlainTextResponse:
+        name = user_input.strip()
+        if not name or len(name) > 100:
+            return _invalid()
+
+        session.selected_full_name = name
+        await _save(db, session)
+
+        if not session.user_id:
+            return _end("Session expired. Please login again to complete your profile.")
+
+        profile_data = UserCompleteProfile(
+            full_name=session.selected_full_name,
+            county=session.selected_county,
+            business_type=session.selected_business_type,
+            income_bracket=session.selected_income_bracket,
+            payment_frequency=session.selected_payment_frequency,
+        )
+
+        user = await user_services.complete_profile(
+            db, UUID(session.user_id), profile_data
+        )
+        if not user:
+            return _end("Something went wrong. Please try again.")
+
+        session.state = USSDState.DASHBOARD
+        await _save(db, session)
+
+        return _end(
+            "Profile completed!\n"
+            "Check your SMS for your insurance recommendation."
         )
