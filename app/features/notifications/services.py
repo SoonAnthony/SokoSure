@@ -9,7 +9,7 @@ from app.features.notifications.models import SMSDirection, SMSLog, SMSSession, 
 from app.features.users.models import User
 from app.features.ussd.constants import COUNTIES, BUSINESS_OPTIONS, INCOME_OPTIONS, FREQUENCY_OPTIONS
 
-# Lazy-init AT SDK
+# Lazy-init AT SDK — reset if credentials change
 _sms_client = None
 
 def _sms():
@@ -31,13 +31,13 @@ class NotificationService:
 
     async def send_sms(self, db: AsyncSession, user: User, message: str) -> dict:
         """Send an SMS to a User object and log it."""
-        response = _sms().send(message, [user.phone_no], sender_id=settings.AT_SHORTCODE)
+        response = _sms().send(message, [user.phone_no], from_=settings.AT_SHORTCODE)
         await self._log(db, user.id, message, SMSDirection.OUTBOUND)
         return response
 
     async def send_sms_to_phone(self, phone_number: str, message: str) -> dict:
         """Send an SMS to a raw phone number (no DB log)."""
-        return _sms().send(message, [phone_number], sender_id=settings.AT_SHORTCODE)
+        return _sms().send(message, [phone_number], from_=settings.AT_SHORTCODE)
 
     async def _log(
         self, db: AsyncSession, user_id, message: str, direction: SMSDirection
