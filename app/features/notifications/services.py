@@ -31,13 +31,13 @@ class NotificationService:
 
     async def send_sms(self, db: AsyncSession, user: User, message: str) -> dict:
         """Send an SMS to a User object and log it."""
-        response = _sms().send(message, [user.phone_no])
+        response = _sms().send(message, [user.phone_no], sender_id=settings.AT_SHORTCODE)
         await self._log(db, user.id, message, SMSDirection.OUTBOUND)
         return response
 
     async def send_sms_to_phone(self, phone_number: str, message: str) -> dict:
         """Send an SMS to a raw phone number (no DB log)."""
-        return _sms().send(message, [phone_number])
+        return _sms().send(message, [phone_number], sender_id=settings.AT_SHORTCODE)
 
     async def _log(
         self, db: AsyncSession, user_id, message: str, direction: SMSDirection
