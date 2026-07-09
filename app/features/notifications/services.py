@@ -266,13 +266,6 @@ class NotificationService:
             db.add(session)
             await db.commit()
 
-            await self.send_sms(
-                db, user,
-                "Profile complete!\n"
-                "We are preparing your insurance recommendation.\n"
-                "You will receive it shortly.",
-            )
-
     async def _handle_keyword(
         self, db: AsyncSession, user: User | None, phone_number: str, text: str
     ) -> None:
@@ -292,12 +285,18 @@ class NotificationService:
     # ─── Event-Specific Outbound SMS ──────────────────────────────────────────
 
     async def send_recommendation_sms(
-        self, db: AsyncSession, user: User, plan: str, premium: float, coverage: float
+        self, db: AsyncSession, user: User, plan: str, premium: float, coverage: float, frequency: str
     ) -> None:
+        period = {
+            "Daily": "day",
+            "Weekly": "week",
+            "Monthly": "month",
+        }.get(frequency, "week")  # fallback keeps old behavior if value is unexpected
+
         await self.send_sms(
             db, user,
             f"Recommended Plan: {plan}\n"
-            f"Premium: KES {premium:,.0f}/week\n"
+            f"Premium: KES {premium:,.0f}/{period}\n"
             f"Coverage: KES {coverage:,.0f}\n"
             "Reply YES to activate.",
         )
