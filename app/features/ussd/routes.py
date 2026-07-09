@@ -16,7 +16,7 @@ async def ussd_callback(
     sessionId:   str = Form(...),
     serviceCode: str = Form(...),
     phoneNumber: str = Form(...),
-    text:        str = Form(...),
+    text:        str = Form(default=""),  # AT sends empty string on first dial
     db: AsyncSession = Depends(get_session),
 ):
     """
