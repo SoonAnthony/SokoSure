@@ -17,3 +17,7 @@ app.include_router(policies_router, prefix="/policies", tags=["policies"])
 app.include_router(payments_router, prefix="/payments", tags=["payments"])
 app.include_router(claims_router, prefix="/claims", tags=["claims"])
 app.include_router(notifications_router)
+
+@app.api_route("/health", methods=["GET", "HEAD"])
+async def health():
+    return {"status": "ok"}

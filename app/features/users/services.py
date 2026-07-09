@@ -5,6 +5,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.features.users.models import User
 from app.features.users.schemas import UserCreate, UserCreateUSSD, UserCompleteProfile
+from app.features.policies import services as policy_services
+from app.features.recommendations import services as recommendation_services
+from app.features.notifications.services import NotificationService
+
+notification_service = NotificationService()
 
 
 def hash_pin(pin: str) -> str:
@@ -53,7 +58,14 @@ async def create_user_from_ussd(db: AsyncSession, data: UserCreateUSSD) -> User:
 
 
 async def complete_profile(db: AsyncSession, user_id: UUID, data: UserCompleteProfile) -> User | None:
-    """Update the profile fields after USSD registration."""
+    """
+    Update the profile fields after USSD registration.
+
+    Once the profile is complete, this triggers recommendation generation
+    (AI or rule-based fallback) and creates a PENDING policy, then sends
+    the recommendation SMS to the user. This is the trigger that was
+    previously missing (Issue 1) — nothing else calls generate_recommendation().
+    """
     user = await get_user_by_id(db, user_id)
     if not user:
         return None
@@ -66,6 +78,20 @@ async def complete_profile(db: AsyncSession, user_id: UUID, data: UserCompletePr
     db.add(user)
     await db.commit()
     await db.refresh(user)
+
+    # Generate recommendation + create the PENDING policy now that the
+    # profile has the fields the recommendation logic needs.
+    policy = await policy_services.generate_recommendation(db, user)
+    recommendation = await recommendation_services.get_recommendation_for_user(db, user.id)
+
+    if recommendation:
+        await notification_service.send_recommendation_sms(
+            db, user,
+            plan=recommendation.recommended_plan,
+            premium=policy.premium_amount,
+            coverage=policy.coverage_amount,
+        )
+
     return user
 
 
