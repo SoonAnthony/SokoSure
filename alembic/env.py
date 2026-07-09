@@ -19,7 +19,7 @@ from app.features.recommendations.models import PolicyRecommendation
 from app.features.policies.models import Policy
 from app.features.payments.models import PremiumPayment
 from app.features.claims.models import Claim
-from app.features.notifications.models import SMSLog
+from app.features.notifications.models import SMSLog, SMSSession
 from app.features.ussd.models import USSDSession
 
 load_dotenv()

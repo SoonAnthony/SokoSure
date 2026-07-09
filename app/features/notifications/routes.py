@@ -1,8 +1,9 @@
 # app/features/notifications/routes.py
 
 from uuid import UUID
+from typing import Optional
 
-from fastapi import APIRouter, Depends, Form, HTTPException, status
+from fastapi import APIRouter, Depends, Form, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,18 +18,18 @@ notification_service = NotificationService()
 
 @router.post("", status_code=status.HTTP_200_OK)
 async def inbound_sms(
-    from_: str = Form(..., alias="from"),   # sender's phone number
-    to: str = Form(...),                    # your AT shortcode
-    text: str = Form(...),                  # message body
-    date: str = Form(...),                  # timestamp from AT
+    from_: str = Form(..., alias="from"),       # sender's phone number — always present
+    text: str = Form(...),                       # message body — always present
+    to: Optional[str] = Form(default=None),      # your AT shortcode — optional
+    date: Optional[str] = Form(default=None),    # timestamp from AT — optional
     db: AsyncSession = Depends(get_session),
 ):
     """
     Africa's Talking posts here when a user sends an SMS to your shortcode.
-    Handles keyword replies: YES, HELP, CLAIM, STATUS, MENU.
+    Drives the SMS profile-completion state machine after USSD registration.
+    Also handles keyword commands: HELP, CLAIM, STATUS, MENU.
     """
     await notification_service.handle_incoming_sms(db, phone_number=from_, text=text)
-    # AT expects a 200 OK with no specific body
     return {"received": True}
 
 
