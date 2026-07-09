@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from uuid import UUID
 
 from app.core.database import get_session
-from app.features.users.schemas import UserCreate, UserRead, UserLogin, UserCompleteProfile
+from app.features.users.schemas import UserCreateUSSD, UserRead, UserLogin, UserCompleteProfile
 from app.features.users import services as user_services
 
 router = APIRouter()
@@ -11,11 +11,11 @@ router = APIRouter()
 
 @router.post("/register", response_model=UserRead, status_code=status.HTTP_201_CREATED)
 async def register_user(
-    user_data: UserCreate,
+    user_data: UserCreateUSSD,
     db: AsyncSession = Depends(get_session),
 ):
     try:
-        user = await user_services.create_user(db, user_data)
+        user = await user_services.create_user_from_ussd(db, user_data)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     return user
