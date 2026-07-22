@@ -90,6 +90,7 @@ async def complete_profile(db: AsyncSession, user_id: UUID, data: UserCompletePr
             plan=recommendation.recommended_plan,
             premium=policy.premium_amount,
             coverage=policy.coverage_amount,
+            frequency=user.payment_frequency,
         )
 
     return user

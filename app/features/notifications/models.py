@@ -24,6 +24,7 @@ class SMSLog(SQLModel, table=True):
 class SMSSessionState(str, Enum):
     """Steps in the SMS profile-completion conversation."""
     AWAIT_NAME      = "AWAIT_NAME"
+    AWAIT_REGION    = "AWAIT_REGION"   # NEW: region picker, shown before county
     AWAIT_COUNTY    = "AWAIT_COUNTY"
     AWAIT_BUSINESS  = "AWAIT_BUSINESS"
     AWAIT_INCOME    = "AWAIT_INCOME"
@@ -41,7 +42,9 @@ class SMSSession(SQLModel, table=True):
 
     # Collected profile data, filled step by step
     full_name:  Optional[str] = None
+    region:     Optional[str] = None   #holds the chosen region key until county is picked
     county:     Optional[str] = None
+    county_page: Optional[int] = None  #tracks pagination position within REGION_COUNTIES[region]
     business:   Optional[str] = None
     income:     Optional[str] = None
 

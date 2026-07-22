@@ -7,7 +7,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.features.notifications.models import SMSDirection, SMSLog, SMSSession, SMSSessionState
 from app.features.users.models import User
-from app.features.ussd.constants import COUNTIES, BUSINESS_OPTIONS, INCOME_OPTIONS, FREQUENCY_OPTIONS
+from app.features.ussd.constants import (
+    REGIONS,
+    REGION_COUNTIES,
+    COUNTIES_PER_PAGE,
+    BUSINESS_OPTIONS,
+    INCOME_OPTIONS,
+    FREQUENCY_OPTIONS,
+)
 
 # Lazy-init AT SDK — reset if credentials change
 _sms_client = None
@@ -53,7 +60,6 @@ class NotificationService:
         Creates an SMSSession so the user's replies are tracked,
         then asks for their full name to start the profile flow.
         """
-        # Create the SMS session for this user
         sms_session = SMSSession(
             phone_number=user.phone_no,
             state=SMSSessionState.AWAIT_NAME,
@@ -68,6 +74,27 @@ class NotificationService:
             "Reply with your Full Name:",
         )
 
+    # ─── Region / County menu builders ─────────────────────────────────────────
+
+    def _region_menu_text(self) -> str:
+        lines = ["Select Region. Reply with number:"]
+        for key, name in REGIONS.items():
+            lines.append(f"{key}. {name}")
+        return "\n".join(lines)
+
+    def _county_menu_text(self, region: str, page: int) -> str:
+        counties = REGION_COUNTIES[region]
+        start = page * COUNTIES_PER_PAGE
+        page_counties = counties[start : start + COUNTIES_PER_PAGE]
+        has_more = (start + COUNTIES_PER_PAGE) < len(counties)
+
+        lines = [f"Select County in {region}:"]
+        for i, county in enumerate(page_counties, start=1):
+            lines.append(f"{i}. {county.replace('_', ' ').title()}")
+        if has_more:
+            lines.append("0. More options")
+        return "\n".join(lines)
+
     # ─── Inbound SMS Handler (state machine) ──────────────────────────────────
 
     async def handle_incoming_sms(
@@ -81,14 +108,12 @@ class NotificationService:
         """
         text = text.strip()
 
-        # Look up user
         result = await db.execute(select(User).where(User.phone_no == phone_number))
         user = result.scalar_one_or_none()
 
         if user:
             await self._log(db, user.id, text, SMSDirection.INBOUND)
 
-        # Check for an active profile-completion session
         session_result = await db.execute(
             select(SMSSession).where(SMSSession.phone_number == phone_number)
         )
@@ -98,7 +123,6 @@ class NotificationService:
             await self._advance_profile(db, user, sms_session, text)
             return
 
-        # No active session — handle as keyword command
         await self._handle_keyword(db, user, phone_number, text)
 
     async def _advance_profile(
@@ -122,23 +146,54 @@ class NotificationService:
                 )
                 return
             session.full_name = text
+            session.state = SMSSessionState.AWAIT_REGION
+            db.add(session)
+            await db.commit()
+            await self.send_sms_to_phone(user.phone_no, self._region_menu_text())
+
+        elif state == SMSSessionState.AWAIT_REGION:
+            if text not in REGIONS:
+                await self.send_sms_to_phone(
+                    user.phone_no,
+                    "Invalid option.\n" + self._region_menu_text(),
+                )
+                return
+            session.region = REGIONS[text]
+            session.county_page = 0
             session.state = SMSSessionState.AWAIT_COUNTY
             db.add(session)
             await db.commit()
             await self.send_sms_to_phone(
-                user.phone_no,
-                "Enter your County\n(e.g. NAIROBI, MOMBASA, KISUMU):",
+                user.phone_no, self._county_menu_text(session.region, 0)
             )
 
         elif state == SMSSessionState.AWAIT_COUNTY:
-            county = text.upper().replace(" ", "_")
-            if county not in COUNTIES:
+            region = session.region
+            page = session.county_page or 0
+            counties = REGION_COUNTIES[region]
+            start = page * COUNTIES_PER_PAGE
+            page_counties = counties[start : start + COUNTIES_PER_PAGE]
+            has_more = (start + COUNTIES_PER_PAGE) < len(counties)
+
+            if text == "0" and has_more:
+                # Advance to next page of counties for this region
+                session.county_page = page + 1
+                db.add(session)
+                await db.commit()
                 await self.send_sms_to_phone(
                     user.phone_no,
-                    "County not recognised. Try again\n(e.g. NAIROBI, MOMBASA, KISUMU):",
+                    self._county_menu_text(region, session.county_page),
                 )
                 return
-            session.county = county
+
+            if not text.isdigit() or not (1 <= int(text) <= len(page_counties)):
+                await self.send_sms_to_phone(
+                    user.phone_no,
+                    "Invalid option.\n" + self._county_menu_text(region, page),
+                )
+                return
+
+            session.county = page_counties[int(text) - 1]
             session.state = SMSSessionState.AWAIT_BUSINESS
             db.add(session)
             await db.commit()
@@ -192,12 +247,10 @@ class NotificationService:
 
             frequency = FREQUENCY_OPTIONS[text]
 
-            # All data collected — update the user's profile
             from app.features.users.schemas import UserCompleteProfile
             from app.features.users import services as user_services
-            from app.features.policies import services as policy_services
 
-            updated_user = await user_services.complete_profile(
+            await user_services.complete_profile(
                 db,
                 user.id,
                 UserCompleteProfile(
@@ -209,25 +262,6 @@ class NotificationService:
                 ),
             )
 
-            # Generate recommendation and create a pending policy
-            try:
-                policy = await policy_services.generate_recommendation(db, updated_user)
-                await self.send_sms(
-                    db, updated_user,
-                    f"Profile complete! Here is your recommendation:\n"
-                    f"Plan: {policy.policy_code}\n"
-                    f"Coverage: KES {policy.coverage_amount:,.0f}\n"
-                    f"Premium: KES {policy.premium_amount:,.0f} ({policy.premium_frequency})\n"
-                    f"Dial *384# and select Activate Policy to get started.",
-                )
-            except Exception:
-                await self.send_sms(
-                    db, updated_user,
-                    "Profile complete!\n"
-                    "Dial *384# to view your policy recommendation.",
-                )
-
-            # Mark session complete
             session.state = SMSSessionState.COMPLETE
             db.add(session)
             await db.commit()
@@ -251,12 +285,18 @@ class NotificationService:
     # ─── Event-Specific Outbound SMS ──────────────────────────────────────────
 
     async def send_recommendation_sms(
-        self, db: AsyncSession, user: User, plan: str, premium: float, coverage: float
+        self, db: AsyncSession, user: User, plan: str, premium: float, coverage: float, frequency: str
     ) -> None:
+        period = {
+            "Daily": "day",
+            "Weekly": "week",
+            "Monthly": "month",
+        }.get(frequency, "week")  # fallback keeps old behavior if value is unexpected
+
         await self.send_sms(
             db, user,
             f"Recommended Plan: {plan}\n"
-            f"Premium: KES {premium:,.0f}/week\n"
+            f"Premium: KES {premium:,.0f}/{period}\n"
             f"Coverage: KES {coverage:,.0f}\n"
             "Reply YES to activate.",
         )
